@@ -13,6 +13,8 @@ class SpoofHook : IXposedHookLoadPackage {
         private val TARGETS = setOf(
             "com.google.android.apps.maps",
             "org.ungoogled.android.apps.maps",
+            "org.ungoogled.android.apps.maps.microg",
+            "com.google.earth",
         )
     }
 
@@ -30,10 +32,7 @@ class SpoofHook : IXposedHookLoadPackage {
                 },
             )
             XposedBridge.log("$TAG: spoof installed in ${lpparam.packageName}")
-            XposedHelpers.findAndHookMethod(
-                "android.app.Activity",
-                lpparam.classLoader,
-                "onResume",
+            val refreshHook =
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
@@ -48,7 +47,22 @@ class SpoofHook : IXposedHookLoadPackage {
                             XposedBridge.log("$TAG refresh hook failed: ${t.message}")
                         }
                     }
-                },
+                }
+            XposedHelpers.findAndHookMethod(
+                "android.app.Activity",
+                lpparam.classLoader,
+                "onResume",
+                refreshHook,
+            )
+            // Re-apply when the window regains focus: map/globe views reset
+            // window attributes on surface changes, which is where the
+            // micro-stutters come from mid-session.
+            XposedHelpers.findAndHookMethod(
+                "android.app.Activity",
+                lpparam.classLoader,
+                "onWindowFocusChanged",
+                Boolean::class.javaPrimitiveType,
+                refreshHook,
             )
             XposedBridge.log("$TAG: 120Hz request installed in ${lpparam.packageName}")
         } catch (t: Throwable) {
